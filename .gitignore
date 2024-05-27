@@ -1,3 +1,14 @@
+# Store Folders
+bot_sessions/
+tmp/
+
+# Baileys
+baileys.log
+bot.qr.png
+core.class.log
+queue.class.log
+package-lock.json
+
 # Logs
 logs
 *.log

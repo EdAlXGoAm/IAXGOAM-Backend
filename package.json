@@ -1,0 +1,28 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node app.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@whiskeysockets/baileys": "github:WhiskeySockets/Baileys",
+    "@bot-whatsapp/bot": "latest",
+    "@bot-whatsapp/cli": "latest",
+    "@bot-whatsapp/database": "latest",
+    "@bot-whatsapp/provider": "latest",
+    "@bot-whatsapp/portal": "latest",
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "wa-sticker-formatter": "4.4.4",
+    "dotenv": "^16.3.1",
+    "joi": "^17.11.0",
+    "mongoose": "^8.0.3",
+    "node-cron": "^3.0.3",
+    "openai": "^4.24.0"
+  }
+}
