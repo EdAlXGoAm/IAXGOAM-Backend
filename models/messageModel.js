@@ -7,7 +7,7 @@ const messageSchema = new mongoose.Schema({
 });
 
 const conversationSchema = new mongoose.Schema({
-  conversationId: { type: Number, required: true },
+  conversationId: { type: String, required: true },
   messages: [messageSchema]
 });
 

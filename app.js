@@ -7,6 +7,7 @@ const MockAdapter = require("@bot-whatsapp/database/mock");
 const { textToSpeech } = require("./services/text_to_speech");
 const { FulldateTimeDate } = require("./services/getdate");
 const { chatGPTCompletion } = require("./services/chatgpt");
+const { assistantGPTResponse } = require("./services/chatgpt-assistant");
 const { getTextMsgVoiceNote } = require("./services/msg_voice_note");
 const { fillSysPrompt, fillMessageHeader } = require("./services/msg_filler.js");
 
@@ -19,6 +20,7 @@ mongoose.connect( MONGO_DB_URI, { useNewUrlParser: true, useUnifiedTopology: tru
 
 const cron = require("node-cron");
 
+const OpenAI = require("openai");
 
 // ----------------- FLOWS -----------------
 
@@ -30,7 +32,14 @@ const flowVoiceNote = addKeyword(EVENTS.VOICE_NOTE).addAction(
       const currentTime = dateId + " " + timeId + " " + dayName;
   
       const chatId = ctx.from;
-      const conversationId = await getLastConversationId(chatId);
+      let conversationId = "";
+      if (await getLastConversationId(chatId) !== 0) {
+        conversationId = await getLastConversationId(chatId);
+      }
+      else {
+        gotoFlow(flowNewConversation);
+        conversationId = await getLastConversationId(chatId);
+      }
       const messagesHistory = await getMessages(chatId, conversationId);
       const [userName, phoneNumber, aliasList] = await getUser(chatId);
       
@@ -43,7 +52,8 @@ const flowVoiceNote = addKeyword(EVENTS.VOICE_NOTE).addAction(
       await saveMessage(chatId, conversationId, userMessage);
       console.log("full_textInput: ", full_textInput);
 
-      const full_textOutput = await chatGPTCompletion( full_textInput, sys_prompt_filled, messagesHistory );
+      // const full_textOutput = await chatGPTCompletion( full_textInput, sys_prompt_filled, messagesHistory );
+      const full_textOutput = await assistantGPTResponse( full_textInput, sys_prompt_filled, conversationId );
       const assistantMessage = { role: "assistant", body: full_textOutput };
       await saveMessage(chatId, conversationId, assistantMessage);
       console.log("full_textOutput: ", full_textOutput);
@@ -72,7 +82,8 @@ const flowVoiceNote = addKeyword(EVENTS.VOICE_NOTE).addAction(
     await saveMessage(chatId, conversationId, userMessage);
     console.log("full_textInput: ", full_textInput);
   
-    const full_textOutput = await chatGPTCompletion( full_textInput, sys_prompt_filled, messagesHistory );
+    // const full_textOutput = await chatGPTCompletion( full_textInput, sys_prompt_filled, messagesHistory );
+    const full_textOutput = await assistantGPTResponse( full_textInput, sys_prompt_filled, conversationId );
     const assistantMessage = { role: "assistant", body: full_textOutput };
     await saveMessage(chatId, conversationId, assistantMessage);
     console.log("full_textOutput: ", full_textOutput);
@@ -87,15 +98,33 @@ const flowVoiceNote = addKeyword(EVENTS.VOICE_NOTE).addAction(
   
   const flowNewConversation = addKeyword("Nueva conversación").addAction(
     async (ctx, ctxFn) => {
-      const chatId = ctx.from;
-      let conversationId = await getLastConversationId(chatId);
-      conversationId += 1;
-      let newMessage = {
-        role: "system",
-        body: "Nueva conversación",
-      };
-      await saveMessage(chatId, conversationId, newMessage);
-      await ctxFn.flowDynamic(`Nueva conversación iniciada`); //🤖
+      try {
+        const openai = new OpenAI({
+          apiKey: process.env.OPENAI_API_KEY
+        });
+        const emptyThread = await openai.beta.threads.create();
+      
+        const chatId = ctx.from;
+        // let conversationId = await getLastConversationId(chatId);
+        let conversationId = emptyThread.id;
+        let newMessage = {
+          role: "system",
+          body: "Nueva conversación",
+        };
+        await saveMessage(chatId, conversationId, newMessage);
+        await ctxFn.flowDynamic(`Nueva conversación iniciada`); //🤖
+      } catch (error) {
+        if (error instanceof OpenAI.APIError) {
+          console.error(error.status); // e.g. 401
+          console.error(error.message); // e.g. The authentication token you passed was invalid...
+          console.error(error.code); // e.g. 'invalid_api_key'
+          console.error(error.type); // e.g. 'invalid_request_error'
+        } else {
+          // Non-API error
+          console.log(error);
+        }
+        return "ERROR";
+      }
     }
   );
 

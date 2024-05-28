@@ -50,16 +50,18 @@ async function saveMessage(chatId, conversationId, newMessage) {
 }
 
 async function getLastConversationId(chatId) {
-  let conversationId = 0;
+  // let conversationId = 0;
   const chat = await Chat.findOne({ chatId });
   if (chat && chat.conversations.length > 0) {
     // Obtener el último conversationId
     const lastConversation = chat.conversations[chat.conversations.length - 1];
-    conversationId = parseInt(lastConversation.conversationId);
+    // conversationId = parseInt(lastConversation.conversationId);
+    conversationId = lastConversation.conversationId;
     return conversationId;
   } else {
     // Si no hay conversaciones o el chat no existe
-    return conversationId;
+    // return conversationId;
+    return 0;
   }
 }
 
