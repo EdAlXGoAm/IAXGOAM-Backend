@@ -3,7 +3,7 @@ const { OpenAI } = require("openai");
 
 const assistantGPTResponse = async (ctx, sysctx, conversationId) => {
 
-    try {
+  try {
     const openai = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY
     });
@@ -18,18 +18,72 @@ const assistantGPTResponse = async (ctx, sysctx, conversationId) => {
 
     const run = await openai.beta.threads.runs.create(
       myThread.id,
-      { assistant_id: assistant.id, stream: true }
+      { assistant_id: assistant.id }
     );
-  
-    for await (const event of run) {
-      if (event.event === 'thread.run.completed') {
-        const messages = await openai.beta.threads.messages.list(event.data.thread_id);
-        const lastMessage = messages.data[0];
-        console.log(lastMessage.content[0]);
-        const lastMessageText = lastMessage.content[0].text.value;
-        return lastMessageText;
+
+    const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+    const handleRequiresAction = async (client, data, runId, threadId) => {
+      try {
+        const toolOutputs =
+          data.required_action.submit_tool_outputs.tool_calls.map((toolCall) => {
+            if (toolCall.function.name === "get_weather") {
+              return {
+                tool_call_id: toolCall.id,
+                output: "49 grados",
+              };
+            } else if (toolCall.function.name === "eventPlanner") {
+              return {
+                tool_call_id: toolCall.id,
+                output: "Alamar guardada correctamente",
+              };
+            }
+          });
+        // Submit all the tool outputs at the same time
+        console.log("toolOutputs: ", toolOutputs)
+        await submitToolOutputs(client, toolOutputs, runId, threadId);
+      } catch (error) {
+        console.error("Error processing required action:", error);
       }
     }
+
+    const submitToolOutputs = async(client, toolOutputs, runId, threadId) => {
+      try {
+        const stream = client.beta.threads.runs.submitToolOutputsStream(
+          threadId,
+          runId,
+          { tool_outputs: toolOutputs },
+        );
+      } catch (error) {
+        console.error("Error submitting tool outputs:", error);
+      }
+    }
+
+    const startPolling = async () => {
+      for (;;) {
+        try {
+          const updatedRun = await openai.beta.threads.runs.retrieve(myThread.id, run.id);
+          console.log("Run status:", updatedRun.status);
+          if (["cancelled", "failed", "completed", "expired"].includes(updatedRun.status)) {
+            const messages = await openai.beta.threads.messages.list(updatedRun.thread_id);
+            const lastMessage = messages.data[0];
+            const lastMessageText = lastMessage.content[0].text.value;
+            console.log(lastMessageText);
+            return lastMessageText;
+            break; // Si el estado es uno de los mencionados, detiene el bucle
+          }
+          else if (updatedRun.status === "requires_action") {
+            handleRequiresAction(openai, updatedRun, run.id, myThread.id);
+          }
+        } catch (error) {
+          console.error("Error polling run status:", error);
+        }
+    
+        await delay(500); // Espera 500 ms antes de la próxima iteración
+      }
+    };
+
+    return await startPolling(run);
   } catch (error) {
     if (error instanceof OpenAI.APIError) {
       console.error(error.status); // e.g. 401
