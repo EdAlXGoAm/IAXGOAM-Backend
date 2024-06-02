@@ -29,19 +29,19 @@ const OpenAI = require("openai");
 
 
 const flowVoiceNote = addKeyword(EVENTS.VOICE_NOTE).addAction(
-    async (ctx, ctxFn) => {
+    async (ctx, { flowDynamic, gotoFlow }) => {
       const msgType = "Audio";
       const [dateId, timeId, dayName] = await FulldateTimeDate();
       const currentTime = dateId + " " + timeId + " " + dayName;
   
       const chatId = ctx.from;
-      let conversationId = "";
+      let conversationId = ""
       if (await getLastConversationId(chatId) !== 0) {
         conversationId = await getLastConversationId(chatId);
       }
       else {
-        gotoFlow(flowNewConversation);
-        conversationId = await getLastConversationId(chatId);
+        await gotoFlow(flowNewConversation);
+        return;
       }
       const messagesHistory = await getMessages(chatId, conversationId);
       const [userName, phoneNumber, aliasList] = await getUser(chatId);
@@ -61,25 +61,37 @@ const flowVoiceNote = addKeyword(EVENTS.VOICE_NOTE).addAction(
       await saveMessage(chatId, conversationId, assistantMessage);
       console.log("full_textOutput: ", full_textOutput);
       
-      await ctxFn.flowDynamic(`${full_textOutput}`); //🤖
+      await flowDynamic(`${full_textOutput}`); //🤖
       const path = await textToSpeech(full_textOutput);
-      await ctxFn.flowDynamic([{ body: "escucha", media: path }]);
+      await flowDynamic([{ body: "escucha", media: path }]);
     }
   );
   
-  const flowMsg = addKeyword(EVENTS.WELCOME).addAction(async (ctx, ctxFn) => {
+  const flowMsg = addKeyword(EVENTS.WELCOME).addAction(async (ctx, { flowDynamic, gotoFlow }) => {
     const msgType = "Texto";
     const [dateId, timeId, dayName] = await FulldateTimeDate();
     const currentTime = dateId + " " + timeId + " " + dayName;
 
     const chatId = ctx.from;
-    const conversationId = await getLastConversationId(chatId);
+    let conversationId = ""
+    if (await getLastConversationId(chatId) !== 0) {
+      conversationId = await getLastConversationId(chatId);
+    }
+    else {
+      await gotoFlow(flowNewConversation);
+      return;
+    }
     const messagesHistory = await getMessages(chatId, conversationId);
     const [userName, phoneNumber, aliasList] = await getUser(chatId);
   
     const sys_prompt_filled = await fillSysPrompt();
   
-    const textInput = ctx.message.conversation;
+    let textInput = ""
+    if (ctx.message.conversation) {
+      textInput = ctx.message.conversation;
+    } else {
+      textInput = ctx.message.extendedTextMessage.text;
+    }
     const full_textInput = await fillMessageHeader(textInput, userName, phoneNumber, msgType, currentTime);
     const userMessage = { role: "user", body: full_textInput };
     await saveMessage(chatId, conversationId, userMessage);
@@ -91,16 +103,16 @@ const flowVoiceNote = addKeyword(EVENTS.VOICE_NOTE).addAction(
     await saveMessage(chatId, conversationId, assistantMessage);
     console.log("full_textOutput: ", full_textOutput);
   
-    await ctxFn.flowDynamic(`${full_textOutput}`); //🤖
+    await flowDynamic(`${full_textOutput}`); //🤖
 
     if (textInput.includes("'")) {
       const path = await textToSpeech(full_textOutput);
-      await ctxFn.flowDynamic([{ body: "escucha", media: path }]);
+      await flowDynamic([{ body: "escucha", media: path }]);
     }
   });
   
   const flowNewConversation = addKeyword("Nueva conversación").addAction(
-    async (ctx, ctxFn) => {
+    async (ctx, { flowDynamic, gotoFlow }) => {
       try {
         const openai = new OpenAI({
           apiKey: process.env.OPENAI_API_KEY
@@ -115,7 +127,16 @@ const flowVoiceNote = addKeyword(EVENTS.VOICE_NOTE).addAction(
           body: "Nueva conversación",
         };
         await saveMessage(chatId, conversationId, newMessage);
-        await ctxFn.flowDynamic(`Nueva conversación iniciada`); //🤖
+        await flowDynamic(`Nueva conversación iniciada`); //🤖
+        if (ctx.message.conversation || ctx.message.extendedTextMessage.text) {
+          if ((ctx.message.conversation && !ctx.message.conversation.includes("Nueva Conversación")) || (ctx.message.extendedTextMessage.text && !ctx.message.extendedTextMessage.text.includes("Nueva Conversación"))) {
+            await gotoFlow(flowMsg);
+          } else {
+            await flowDynamic(`Envia un mensaje para iniciar una conversación`); //🤖
+          }
+        } else {
+          await flowDynamic(`Envia un mensaje para iniciar una conversación`); //🤖
+        }
       } catch (error) {
         if (error instanceof OpenAI.APIError) {
           console.error(error.status); // e.g. 401
@@ -150,6 +171,7 @@ const main = async () => {
       // console.log("Tarea ejecutándose cada minuto");
       const [dateId, timeId, dayName] = await FulldateTimeDate();
       const relevantTasks = await fetchAndFormatTasks();
+      console.log("relevantTasks: ", JSON.stringify(relevantTasks));
       // Convertir notificación a un json string
       const notification_String = JSON.stringify(relevantTasks);
       if (relevantTasks.length > 0) {
@@ -157,6 +179,17 @@ const main = async () => {
           const task = relevantTasks[index];
           const phoneNumberList = task.responsable_phones;
           console.log("Numeros de telefono: ", phoneNumberList);
+
+          /* ----------------- ALARMA Update to `Completada` ----------------- */
+          if (task.type === "Alarma") {
+            lastNotification = task.notifications_info.notifications[task.notifications_info.notifications.length - 1].date_hour;
+            console.log("lastNotification: ", lastNotification);
+            if (lastNotification === dateId + " " + timeId + " " + dayName) {
+              task.status = "Completada";
+              await convertAndSaveTask(JSON.stringify(task));
+            }
+          }
+          /* Fin ------------- ALARMA Update to `Completada` ----------------- */
           
           const message = "NOTIFICA EL SIGUIENTE RECORDATORIO\n" + 
                           "MsgTimestamp: " + dateId + " " + timeId + " " + dayName + "\n" +

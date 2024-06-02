@@ -4,7 +4,9 @@ const Joi = require("joi");
 async function convertAndSaveTask(jsonString) {
     // Define el esquema de validación con Joi
     const schema = Joi.object({
+      _id: Joi.string(), // Agregar el campo _id en la validación
       id: Joi.string().required(),
+      timestamp_creation: Joi.string(),
       title: Joi.string().required(),
       details: Joi.string(),
       responsable_names: Joi.array().items(Joi.string()),
@@ -16,6 +18,7 @@ async function convertAndSaveTask(jsonString) {
       notifications_info: Joi.object({
         notifications: Joi.array().items(
           Joi.object({
+            _id: Joi.string(), // Agregar el campo _id en la validación
             date_hour: Joi.string(),
             details: Joi.string(),
           }),
@@ -34,11 +37,13 @@ async function convertAndSaveTask(jsonString) {
         filling_details: Joi.string(),
         filling_notifications: Joi.array().items(
           Joi.object({
+            _id: Joi.string(), // Agregar el campo _id en la validación
             date_hour: Joi.string(),
             details: Joi.string(),
           }),
         ),
-      })
+      }),
+      __v: Joi.number()
     });
   
     try {
