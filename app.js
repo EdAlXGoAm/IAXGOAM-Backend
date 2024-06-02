@@ -7,12 +7,15 @@ const MockAdapter = require("@bot-whatsapp/database/mock");
 const { textToSpeech } = require("./services/text_to_speech");
 const { FulldateTimeDate } = require("./services/getdate");
 const { chatGPTCompletion } = require("./services/chatgpt");
+const sys_prompt_main = require("./prompt/sys_prompt_main.js");
 const { assistantGPTResponse } = require("./services/chatgpt-assistant");
 const { getTextMsgVoiceNote } = require("./services/msg_voice_note");
 const { fillSysPrompt, fillMessageHeader } = require("./services/msg_filler.js");
 
 const { getUser } = require("./controllers/userController");
 const { getMessages, saveMessage, getLastConversationId } = require("./controllers/messageController");
+
+const { convertAndSaveTask, fetchAndFormatTasks, getLastTaskId, removeTaskById, getAllTasks, getTaskFromUser } = require("./controllers/taskController");
 
 const mongoose = require("mongoose");
 const MONGO_DB_URI = process.env.MONGO_DB_URI;
@@ -141,6 +144,47 @@ const main = async () => {
         database: adapterDB,
     })
     QRPortalWeb()
+
+    
+    cron.schedule("* * * * *", async () => {
+      // console.log("Tarea ejecutándose cada minuto");
+      const [dateId, timeId, dayName] = await FulldateTimeDate();
+      const relevantTasks = await fetchAndFormatTasks();
+      // Convertir notificación a un json string
+      const notification_String = JSON.stringify(relevantTasks);
+      if (relevantTasks.length > 0) {
+        for (let index = 0; index < relevantTasks.length; index++) {
+          const task = relevantTasks[index];
+          const phoneNumberList = task.responsable_phones;
+          console.log("Numeros de telefono: ", phoneNumberList);
+          
+          const message = "NOTIFICA EL SIGUIENTE RECORDATORIO\n" + 
+                          "MsgTimestamp: " + dateId + " " + timeId + " " + dayName + "\n" +
+                          notification_String;
+          const baileysConnection = await adapterProvider.getInstance();
+          let full_textOutput = await chatGPTCompletion( message, sys_prompt_main.SYS_CONTEXT, [] );
+          console.log("full_textOutput: ", full_textOutput);
+          
+          const path = await textToSpeech(full_textOutput);
+          // Enviar mensaje de audio
+          for (let index = 0; index < phoneNumberList.length; index++) {
+            let newMessage = {
+              role: "user", // o el rol adecuado según tu lógica
+              body: full_textOutput,
+            };
+            const conversationId = await getLastConversationId(phoneNumberList[index]);
+            await saveMessage(phoneNumberList[index], conversationId, newMessage);
+            console.log("enviando mensaje: ", newMessage, " a ", phoneNumberList[index]);
+            await baileysConnection.sendMessage(phoneNumberList[index] + "@s.whatsapp.net", { text: full_textOutput, });
+            await baileysConnection.sendMessage(phoneNumberList[index] + "@s.whatsapp.net", {
+              audio: { url: path },
+              mimetype: "audio/mp4", // Asegúrate de usar el mimetype correcto para tu archivo
+              ptt: true, // Esto es para enviarlo como un mensaje PTT (Push To Talk), cambia a false si no lo deseas
+            });
+          }
+        }
+      }
+    });
 }
 
 main()

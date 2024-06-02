@@ -1,6 +1,8 @@
 require("dotenv").config();
 const { OpenAI } = require("openai");
 
+const { convertAndSaveTask, fetchAndFormatTasks, getLastTaskId, removeTaskById, getAllTasks, getTaskFromUser } = require("./../controllers/taskController");
+
 const assistantGPTResponse = async (ctx, sysctx, conversationId) => {
 
   try {
@@ -33,9 +35,21 @@ const assistantGPTResponse = async (ctx, sysctx, conversationId) => {
                 output: "49 grados",
               };
             } else if (toolCall.function.name === "eventPlanner") {
+              console.log("Guardando/Actualizando TAREA EN BASE DE DATOS");
+              let json_crude = toolCall.function.arguments;
+              json_crude = json_crude.replace(/`/g, '')
+              json_crude = json_crude.replace("json", '')
+              console.log(json_crude);
+              const flag = convertAndSaveTask(json_crude);
+              if (flag) {
+                output_msg = "Tarea guardada con éxito";
+              }
+              else {
+                output_msg = "Disculpame, pero no pude guardar el recordatorio. Intenta de nuevo debieron faltar datos";
+              }
               return {
                 tool_call_id: toolCall.id,
-                output: "Alamar guardada correctamente",
+                output: output_msg,
               };
             }
           });
