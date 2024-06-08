@@ -7,10 +7,11 @@ const taskSchema = new mongoose.Schema({
   details: { type: String},
   responsable_names: [{ type: String }],
   responsable_phones: [{ type: String }],
+  time: { type: String },
   place: { type: String },
   situation: { type: String },
   type: { type: String, enum: ['Alarma', 'Recordatorio', 'Pendientes','Eventos'], required: true },
-  status: { type: String, enum: ['Pendiente', 'Corriendo', 'Completada','Cancelada'], required: true },
+  status: { type: String, enum: ['Pending', 'Running', 'Completed', 'Canceled', 'Past'], required: true },
   notifications_info: {
     notifications: [{
       date_hour: { type: String },
@@ -26,7 +27,7 @@ const taskSchema = new mongoose.Schema({
     date_hour_end: { type: String }
   },
   event_filling_info: {
-    filling_status: { type: String, enum: ['Completo', 'Datos Faltantes', 'Se debe actualizar o Comprobar constantemente','Tiene tiempo que no se revisa la tarea y no esta en estado completada'], required: true },
+    filling_status: { type: String, enum: ['Completed', 'To update', 'To review'], required: true },
     filling_details: { type: String },
     filling_notifications: [{
       date_hour: { type: String },

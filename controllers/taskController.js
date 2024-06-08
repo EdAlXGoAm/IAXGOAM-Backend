@@ -1,6 +1,47 @@
 const Task = require("./../models/taskModel"); // Asegúrate de que la ruta sea correcta
 const { FulldateTimeDate } = require("./../services/getdate");
 const Joi = require("joi");
+
+function validateId(jsonString) {
+  // Define el esquema de validación con Joi
+  const schema = Joi.object({
+    id: Joi.string().required(),
+  }).unknown(true);
+
+  try {
+    // Intenta convertir y validar el JSON
+    const validatedData = schema.validate(JSON.parse(jsonString), { abortEarly: false });
+    console.log("validatedData: ", validatedData);
+    
+    if (validatedData.error) {
+      throw validatedData.error;
+    }
+
+    // Devuelve solo el id validado
+    return validatedData.value.id;
+  } catch (error) {
+    console.error("Error al validar el id:", error);
+    return "";
+  }
+}
+
+function validateTitle(jsonString) {
+  // Define el esquema de validación con Joi
+  const schema = Joi.object({
+    title: Joi.string().required(),
+  }).unknown(true);
+
+  try {
+    // Intenta convertir y validar el JSON
+    const validatedData = schema.validateAsync(JSON.parse(jsonString));
+
+    return validatedData.title;
+  } catch (error) {
+    console.error("Error al validar el título:", error);
+    return "";
+  }
+}
+
 async function convertAndSaveTask(jsonString) {
     // Define el esquema de validación con Joi
     const schema = Joi.object({
@@ -11,10 +52,11 @@ async function convertAndSaveTask(jsonString) {
       details: Joi.string(),
       responsable_names: Joi.array().items(Joi.string()),
       responsable_phones: Joi.array().items(Joi.string()),
+      time: Joi.string(),
       place: Joi.string(),
       situation: Joi.string(),
       type: Joi.string().valid('Alarma', 'Recordatorio', 'Pendientes', 'Eventos').required(),
-      status: Joi.string().valid('Pendiente', 'Corriendo', 'Completada', 'Cancelada').required(),
+      status: Joi.string().valid('Pending', 'Running', 'Completed', 'Completed', 'Past').required(),
       notifications_info: Joi.object({
         notifications: Joi.array().items(
           Joi.object({
@@ -33,7 +75,7 @@ async function convertAndSaveTask(jsonString) {
         date_hour_end: Joi.string(),
       }),
       event_filling_info: Joi.object({
-        filling_status: Joi.string().valid('Completo', 'Datos Faltantes', 'Se debe actualizar o Comprobar constantemente', 'Tiene tiempo que no se revisa la tarea y no esta en estado completada').required(),
+        filling_status: Joi.string().valid('Completed', 'To update', 'To review').required(),
         filling_details: Joi.string(),
         filling_notifications: Joi.array().items(
           Joi.object({
@@ -79,7 +121,7 @@ async function fetchAndFormatTasks() {
 
     // Filtrar tareas con estado 'Pendiente' o 'Corriendo'
     const activeTasks = tasks.filter(
-      (task) => task.status === "Pendiente" || task.status === "Corriendo"
+      (task) => task.status === "Pending" || task.status === "Running"
     );
 
     // console.log("** Tareas Activas: \n",activeTasks)
@@ -134,26 +176,11 @@ async function getLastTaskId(){
   return lastTaskId;
 }
 
-async function removeTaskById(jsonString){
+async function removeTaskById(id){
 
   try {
-    // Intenta convertir y validar el JSON
-    const validatedData = JSON.parse(jsonString);
-
-    // Crea un nuevo objeto de tarea con los datos validados
-    const taskData = new Task(validatedData);
-
-    // Obtener todas las tareas de la base de datos
-    const tasks = await Task.find({});
-    
-    // Comprobar si hay tareas disponibles
-    if (tasks.length === 0) {
-      console.log("No hay tareas disponibles para mostrar.");
-      return 0;
-    }
-
     // Remover la tarea con el TaskIf
-    const deletedTask = await Task.findOneAndDelete({ 'info_general.id': taskData.id });
+    const deletedTask = await Task.findOneAndDelete({ 'id': id });
     if (deletedTask) {
       console.log('La tarea fue eliminada con éxito', deletedTask);
       return 1;
@@ -174,7 +201,7 @@ async function getAllTasks(){
     const all_tasks = await Task.find({});
     // Filtrar tareas con estado 'Pendiente' o 'Corriendo'
     const tasks = all_tasks.filter(
-      (task) => task.status === "Pendiente" || task.status === "Corriendo"
+      (task) => task.status === "Pending" || task.status === "Running"
     );
     // Comprobar si hay tareas disponibles
     if (tasks.length === 0) {
@@ -195,7 +222,7 @@ async function getTaskFromUser(userForGetTask) {
     const all_tasks = await Task.find({});
     // Filtrar tareas con estado 'Pendiente' o 'Corriendo'
     const tasks = all_tasks.filter(
-      (task) => task.status === "Pendiente" || task.status === "Corriendo"
+      (task) => task.status === "Pending" || task.status === "Running"
     );
     // Comprobar si hay tareas disponibles
     if (tasks.length === 0) {
@@ -218,6 +245,138 @@ async function getTaskFromUser(userForGetTask) {
   }
 }
 
+async function getTaskById(id) {
+  let taskById = "";
+  try {
+    // Obtener la tarea con el TaskId
+    const task = await Task.findOne({ 'id': id });
+    console.log("task: ", task);
+    taskById += "id: " + task.id + "\n";
+    taskById += "title: " + task.title + "\n";
+    taskById += "details: " + task.details + "\n";
+    taskById += "responsable_names: " + task.responsable_names + "\n";
+    taskById += "responsable_phones: " + task.responsable_phones + "\n";
+    taskById += "time: " + task.time + "\n";
+    taskById += "place: " + task.place + "\n";
+    taskById += "situation: " + task.situation + "\n";
+    taskById += "type: " + task.type + "\n";
+    taskById += "status: " + task.status + "\n";
+    taskById += "notifications: " + "\n";
+    task.notifications_info.notifications.forEach(notification => {
+      taskById += "date_hour: " + notification.date_hour + "\n";
+      taskById += "details: " + notification.details + "\n";
+    });
+    taskById += "limit_date_hour_start: " + task.pending_info.limit_date_hour_start + "\n";
+    taskById += "limit_date_hour_end: " + task.pending_info.limit_date_hour_end + "\n";
+    taskById += "date_hour_start: " + task.pending_and_events_info.date_hour_start + "\n";
+    taskById += "date_hour_end: " + task.pending_and_events_info.date_hour_end + "\n";
+    taskById += "filling_status: " + task.event_filling_info.filling_status + "\n";
+    taskById += "filling_details: " + task.event_filling_info.filling_details + "\n";
+    taskById += "filling_notifications: " + "\n";
+    task.event_filling_info.filling_notifications.forEach(fillingNotification => {
+      taskById += "date_hour: " + fillingNotification.date_hour + "\n";
+      taskById += "details: " + fillingNotification.details
+    }
+    );
+    return taskById;
+  } catch (error) {
+    console.error("Error al obtener el último id de la tarea:", error);
+    return taskById;
+  }
+}
+
+async function getTaskByTitle(title) {
+  let taskByTitle = "";
+  try {
+    // Obtener la tarea con el TaskTitle
+    const task = await Task.findOne({ 'title': title });
+    taskByTitle += "id: " + task.id + "\n";
+    taskByTitle += "title: " + task.title + "\n";
+    taskByTitle += "details: " + task.details + "\n";
+    taskByTitle += "responsable_names: " + task.responsable_names + "\n";
+    taskByTitle += "responsable_phones: " + task.responsable_phones + "\n";
+    taskByTitle += "time: " + task.time + "\n";
+    taskByTitle += "place: " + task.place + "\n";
+    taskByTitle += "situation: " + task.situation + "\n";
+    taskByTitle += "type: " + task.type + "\n";
+    taskByTitle += "status: " + task.status + "\n";
+    taskByTitle += "notifications: " + "\n";
+    task.notifications_info.notifications.forEach(notification => {
+      taskByTitle += "date_hour: " + notification.date_hour + "\n";
+      taskByTitle += "details: " + notification.details + "\n";
+    });
+    taskByTitle += "limit_date_hour_start: " + task.pending_info.limit_date_hour_start + "\n";
+    taskByTitle += "limit_date_hour_end: " + task.pending_info.limit_date_hour_end + "\n";
+    taskByTitle += "date_hour_start: " + task.pending_and_events_info.date_hour_start + "\n";
+    taskByTitle += "date_hour_end: " + task.pending_and_events_info.date_hour_end + "\n";
+    taskByTitle += "filling_status: " + task.event_filling_info.filling_status + "\n";
+    taskByTitle += "filling_details: " + task.event_filling_info.filling_details + "\n";
+    taskByTitle += "filling_notifications: " + "\n";
+    task.event_filling_info.filling_notifications.forEach(fillingNotification => {
+      taskByTitle += "date_hour: " + fillingNotification.date_hour + "\n";
+      taskByTitle += "details: " + fillingNotification.details
+    }
+    );
+    return taskByTitle;
+  }
+  catch (error) {
+    console.error("Error al obtener el último id de la tarea:", error);
+    return taskByTitle;
+  }
+}
+
+async function getAllTasksString(){
+  try {
+    // Obtener todas las tareas de la base de datos
+    const all_tasks = await Task.find({});
+    // Filtrar tareas con estado 'Pendiente' o 'Corriendo'
+    const tasks = all_tasks.filter(
+      (task) => task.status === "Pending" || task.status === "Running"
+    );
+    // Comprobar si hay tareas disponibles
+    if (tasks.length === 0) {
+      console.log("No hay tareas disponibles para mostrar.");
+      return "No hay tareas disponibles para mostrar.";
+    }
+    console.log(tasks);
+    stringTasks = "";
+    tasks.forEach(task => {
+      stringTasks += "id: " + task.id + "\n";
+      stringTasks += "title: " + task.title + "\n";
+      stringTasks += "details: " + task.details + "\n";
+      stringTasks += "responsable_names: " + task.responsable_names + "\n";
+      stringTasks += "responsable_phones: " + task.responsable_phones + "\n";
+      stringTasks += "time: " + task.time + "\n";
+      stringTasks += "place: " + task.place + "\n";
+      stringTasks += "situation: " + task.situation + "\n";
+      stringTasks += "type: " + task.type + "\n";
+      stringTasks += "status: " + task.status + "\n";
+      stringTasks += "notifications: " + "\n";
+      task.notifications_info.notifications.forEach(notification => {
+        stringTasks += "date_hour: " + notification.date_hour + "\n";
+        stringTasks += "details: " + notification.details + "\n";
+      });
+      stringTasks += "limit_date_hour_start: " + task.pending_info.limit_date_hour_start + "\n";
+      stringTasks += "limit_date_hour_end: " + task.pending_info.limit_date_hour_end + "\n";
+      stringTasks += "date_hour_start: " + task.pending_and_events_info.date_hour_start + "\n";
+      stringTasks += "date_hour_end: " + task.pending_and_events_info.date_hour_end + "\n";
+      stringTasks += "filling_status: " + task.event_filling_info.filling_status + "\n";
+      stringTasks += "filling_details: " + task.event_filling_info.filling_details + "\n";
+      stringTasks += "filling_notifications: " + "\n";
+      task.event_filling_info.filling_notifications.forEach(fillingNotification => {
+        stringTasks += "date_hour: " + fillingNotification.date_hour + "\n";
+        stringTasks += "details: " + fillingNotification.details
+      }
+      );
+    }
+    );
+    return stringTasks;
+  } catch (error) {
+    console.error("Error al consultar las tarea:", error);
+    return "Hubo un error al consultar las tareas";
+  }
+}
+
 // Exporta todas tus funciones
 module.exports = {
   convertAndSaveTask,
@@ -225,5 +384,10 @@ module.exports = {
   getLastTaskId,
   removeTaskById,
   getAllTasks,
-  getTaskFromUser
+  getTaskFromUser,
+  getTaskById,
+  getTaskByTitle,
+  validateId,
+  validateTitle,
+  getAllTasksString
 };

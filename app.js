@@ -167,28 +167,50 @@ const main = async () => {
     QRPortalWeb()
 
     
+    // try {
+    //   const openai = new OpenAI({
+    //     apiKey: process.env.OPENAI_API_KEY
+    //   });
+
+      
+    //   const assistant = await openai.beta.assistants.retrieve(process.env.ASSISTANT_ID)
+    //   const myThread = await openai.beta.threads.retrieve("thread_BJMlNnKhZUjBZvXwgPhwPYmK");
+
+    //   const updatedRun = await openai.beta.threads.runs.retrieve(myThread.id, "run_vGdxoUjBkPzhLjYTfDTVmFY1");
+      
+    //   const messages = await openai.beta.threads.messages.list(updatedRun.thread_id);
+    //   const lastMessage = messages.data[0];
+    //   const lastMessageText = lastMessage.content[0].text.value;
+    //   console.log(lastMessageText);
+    // }
+    // catch (error) {
+    //   console.error("Error initializing OpenAI:", error);
+    // }
+
+
+    
     cron.schedule("* * * * *", async () => {
       // console.log("Tarea ejecutándose cada minuto");
       const [dateId, timeId, dayName] = await FulldateTimeDate();
       const relevantTasks = await fetchAndFormatTasks();
-      console.log("relevantTasks: ", JSON.stringify(relevantTasks));
+      // console.log("relevantTasks: ", JSON.stringify(relevantTasks));
       // Convertir notificación a un json string
-      const notification_String = JSON.stringify(relevantTasks);
       if (relevantTasks.length > 0) {
         for (let index = 0; index < relevantTasks.length; index++) {
           const task = relevantTasks[index];
+          const notification_String = JSON.stringify(task);
           const phoneNumberList = task.responsable_phones;
           console.log("Numeros de telefono: ", phoneNumberList);
 
           /* ----------------- ALARMA Update to `Completada` ----------------- */
-          if (task.type === "Alarma") {
+          // if (task.type === "Alarma") {
             lastNotification = task.notifications_info.notifications[task.notifications_info.notifications.length - 1].date_hour;
             console.log("lastNotification: ", lastNotification);
             if (lastNotification === dateId + " " + timeId + " " + dayName) {
-              task.status = "Completada";
+              task.status = "Completed";
               await convertAndSaveTask(JSON.stringify(task));
             }
-          }
+          // }
           /* Fin ------------- ALARMA Update to `Completada` ----------------- */
           
           const message = "NOTIFICA EL SIGUIENTE RECORDATORIO\n" + 
@@ -198,7 +220,7 @@ const main = async () => {
           let full_textOutput = await chatGPTCompletion( message, sys_prompt_main.SYS_CONTEXT, [] );
           console.log("full_textOutput: ", full_textOutput);
           
-          const path = await textToSpeech(full_textOutput);
+          // const path = await textToSpeech(full_textOutput);
           // Enviar mensaje de audio
           for (let index = 0; index < phoneNumberList.length; index++) {
             let newMessage = {
@@ -209,11 +231,11 @@ const main = async () => {
             await saveMessage(phoneNumberList[index], conversationId, newMessage);
             console.log("enviando mensaje: ", newMessage, " a ", phoneNumberList[index]);
             await baileysConnection.sendMessage(phoneNumberList[index] + "@s.whatsapp.net", { text: full_textOutput, });
-            await baileysConnection.sendMessage(phoneNumberList[index] + "@s.whatsapp.net", {
-              audio: { url: path },
-              mimetype: "audio/mp4", // Asegúrate de usar el mimetype correcto para tu archivo
-              ptt: true, // Esto es para enviarlo como un mensaje PTT (Push To Talk), cambia a false si no lo deseas
-            });
+            // await baileysConnection.sendMessage(phoneNumberList[index] + "@s.whatsapp.net", {
+            //   audio: { url: path },
+            //   mimetype: "audio/mp4", // Asegúrate de usar el mimetype correcto para tu archivo
+            //   ptt: true, // Esto es para enviarlo como un mensaje PTT (Push To Talk), cambia a false si no lo deseas
+            // });
           }
         }
       }
